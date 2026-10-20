@@ -1,9 +1,0 @@
-# ninja log v5
-131	4580	7378391251926575	CMakeFiles/sim.dir/verilator/include/verilated.cpp.obj	9c72b2d64018f85a
-5	43	7378364138110238	obj_dir/Vtop__ALL.cpp	571ea711a7f662ef
-139	601	7378391212205433	CMakeFiles/sim.dir/src/BinaryUtils.cpp.obj	5381e9f73bdfe505
-5	43	7378364138110238	obj_dir/verilated.cpp	571ea711a7f662ef
-5	43	7378364138110238	obj_dir/verilated_threads.cpp	571ea711a7f662ef
-5	43	7378364138110238	obj_dir/Vtop.h	571ea711a7f662ef
-56	3420	7378391362756404	CMakeFiles/sim.dir/src/main.cpp.obj	538e901abc561f89
-50	3874	7378391367301053	CMakeFiles/sim.dir/verilator/include/verilated_threads.cpp.obj	bf7897373d5de11e

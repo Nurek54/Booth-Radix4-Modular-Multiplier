@@ -1,4 +1,0 @@
-C:/Users/g_sie/CLionProjects/OiAK_Projekt_Cpp_Verilog/cmake-build-ninja-debug/CMakeFiles/sim.dir
-C:/Users/g_sie/CLionProjects/OiAK_Projekt_Cpp_Verilog/cmake-build-ninja-debug/CMakeFiles/verilate.dir
-C:/Users/g_sie/CLionProjects/OiAK_Projekt_Cpp_Verilog/cmake-build-ninja-debug/CMakeFiles/edit_cache.dir
-C:/Users/g_sie/CLionProjects/OiAK_Projekt_Cpp_Verilog/cmake-build-ninja-debug/CMakeFiles/rebuild_cache.dir

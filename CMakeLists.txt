@@ -1,42 +1,76 @@
 cmake_minimum_required(VERSION 3.16)
-project(OiAK_Projekt_Cpp_Verilog)
+project(Booth_Radix4_Modular_Multiplier LANGUAGES CXX)
 
-# Dodaj ścieżkę do Verilatora
-set(VERILATOR_ROOT "C:/Users/g_sie/CLionProjects/OiAK_Projekt_Cpp_Verilog/verilator")
-set(VERILATOR_BIN "${VERILATOR_ROOT}/bin/verilator_bin.exe")
-
-# Dodaj include directories
-include_directories(
-        ${VERILATOR_ROOT}/include
-        ${VERILATOR_ROOT}/include/vltstd
-        ${CMAKE_BINARY_DIR}/obj_dir # Dodanie katalogu obj_dir do include directories
-)
-
-# Ustawienia kompilatora
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-shadow -Wno-sign-compare -Wno-tautological-compare -Wno-uninitialized -Wno-unused-but-set-parameter -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable")
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Kompilacja plików Verilog
-add_custom_command(
-        OUTPUT ${CMAKE_BINARY_DIR}/obj_dir/Vtop__ALL.cpp ${CMAKE_BINARY_DIR}/obj_dir/verilated.cpp ${CMAKE_BINARY_DIR}/obj_dir/verilated_threads.cpp ${CMAKE_BINARY_DIR}/obj_dir/Vtop.h
-        COMMAND ${VERILATOR_BIN} --cc ${CMAKE_SOURCE_DIR}/verilog/top.v --Mdir ${CMAKE_BINARY_DIR}/obj_dir --exe ${CMAKE_SOURCE_DIR}/src/main.cpp
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        DEPENDS ${CMAKE_SOURCE_DIR}/verilog/top.v ${CMAKE_SOURCE_DIR}/verilog/ALU.v ${CMAKE_SOURCE_DIR}/verilog/ControlPath.v ${CMAKE_SOURCE_DIR}/verilog/Counter.v ${CMAKE_SOURCE_DIR}/verilog/DataPath.v ${CMAKE_SOURCE_DIR}/verilog/Dff.v ${CMAKE_SOURCE_DIR}/verilog/PIPO1.v ${CMAKE_SOURCE_DIR}/verilog/Radix4BoothMain.v ${CMAKE_SOURCE_DIR}/verilog/Radix4Booth_tb.v ${CMAKE_SOURCE_DIR}/verilog/ShiftRegisterA.v ${CMAKE_SOURCE_DIR}/src/main.cpp
-        COMMENT "Verilating top.v"
-)
+add_executable(booth_sim
+        src/main.cpp
+        src/hw/BoothRadix4Sim.cpp
+        src/sw/Booth.cpp
+        src/modulo/Modulo.cpp
+        src/util/BinaryUtils.cpp)
+target_include_directories(booth_sim PRIVATE src)
+target_compile_definitions(booth_sim PRIVATE BOOTH_HAS_VERILATOR)
 
-# Dodanie plików źródłowych do projektu
-add_executable(sim ${CMAKE_BINARY_DIR}/obj_dir/Vtop__ALL.cpp ${VERILATOR_ROOT}/include/verilated.cpp ${VERILATOR_ROOT}/include/verilated_threads.cpp ${CMAKE_SOURCE_DIR}/src/main.cpp
-        ${CMAKE_SOURCE_DIR}/src/Booth.cpp
-        ${CMAKE_SOURCE_DIR}/src/BinaryUtils.cpp
-        ${CMAKE_SOURCE_DIR}/src/Modulo.cpp
-        sc_time_stamp.cpp)
+# Verilator jest potrzebny tylko do zamiany rtl/BoothRadix4.v na C++. Bez niego projekt uzywa modelu
+# wygenerowanego wczesniej (generated/) i runtime'u Verilatora (third_party/), wiec buduje sie zwyklym
+# kompilatorem C++, np. MinGW dolaczonym do CLion.
+option(BOOTH_VERILATE "Generuj model z rtl/ przy kazdym budowaniu, jesli Verilator jest zainstalowany" ON)
 
-# Dodanie plików źródłowych wygenerowanych przez Verilatora
-add_custom_target(verilate ALL DEPENDS ${CMAKE_BINARY_DIR}/obj_dir/Vtop__ALL.cpp)
+find_program(VERILATOR_BIN NAMES verilator_bin verilator_bin.exe
+        HINTS $ENV{VERILATOR_ROOT}/bin C:/msys64/ucrt64/bin C:/msys64/mingw64/bin)
+if (VERILATOR_BIN)
+    get_filename_component(VERILATOR_BIN_DIR "${VERILATOR_BIN}" DIRECTORY)
+    find_package(verilator QUIET HINTS $ENV{VERILATOR_ROOT} "${VERILATOR_BIN_DIR}/../share/verilator")
+    # cmake --build <katalog> --target regenerate_model: odswieza generated/ po zmianie pliku Verilog
+    add_custom_target(regenerate_model
+            COMMAND ${CMAKE_COMMAND} -DVERILATOR_BIN=${VERILATOR_BIN} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P ${CMAKE_SOURCE_DIR}/tools/regenerate_model.cmake)
+endif ()
 
-# Zależności dla executable
-add_dependencies(sim verilate)
+if (verilator_FOUND AND BOOTH_VERILATE)
+    message(STATUS "Verilator ${verilator_VERSION}: model generowany z rtl/BoothRadix4.v")
+    verilate(booth_sim
+            SOURCES rtl/BoothRadix4.v
+            PREFIX VBoothRadix4
+            TRACE
+            VERILATOR_ARGS -Wall -Wno-fatal)
+else ()
+    message(STATUS "Model z generated/VBoothRadix4 i runtime Verilatora 5.020 z third_party/")
+    file(READ rtl/BoothRadix4.v rtl)
+    string(REPLACE "\r" "" rtl "${rtl}")
+    string(SHA256 rtl_hash "${rtl}")
+    file(STRINGS generated/rtl.sha256 generated_hash LIMIT_COUNT 1)
+    if (NOT rtl_hash STREQUAL generated_hash)
+        message(WARNING "rtl/BoothRadix4.v zmienil sie od wygenerowania modelu w generated/. "
+                "Symulacja uzywa starej wersji; po instalacji Verilatora uruchom cel regenerate_model.")
+    endif ()
+    file(GLOB model_sources CONFIGURE_DEPENDS generated/VBoothRadix4/*.cpp)
+    set(VL third_party/verilator/include)
+    add_library(verilated_model STATIC ${model_sources}
+            ${VL}/verilated.cpp ${VL}/verilated_threads.cpp ${VL}/verilated_vcd_c.cpp)
+    target_include_directories(verilated_model PUBLIC generated/VBoothRadix4 ${VL})
+    target_compile_definitions(verilated_model PUBLIC VM_TRACE=1 VM_TRACE_VCD=1)
+    if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(verilated_model PRIVATE -w)  # kod wygenerowany i runtime: bez ostrzezen
+    endif ()
+    find_package(Threads REQUIRED)
+    target_link_libraries(verilated_model PUBLIC Threads::Threads)
+    target_link_libraries(booth_sim PRIVATE verilated_model)
+endif ()
 
-# Linkowanie bibliotek
-target_link_libraries(sim PRIVATE pthread atomic)
+# MinGW: libstdc++ i libgcc wbudowane w exe, a libwinpthread-1.dll kopiowany z kompilatora
+# obok exe, zeby Windows nie wzial starszej wersji z innego MinGW w PATH.
+if (MINGW)
+    get_filename_component(MINGW_BIN "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    target_link_options(booth_sim PRIVATE -static-libgcc -static-libstdc++)
+    if (EXISTS "${MINGW_BIN}/libwinpthread-1.dll")
+        add_custom_command(TARGET booth_sim POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${MINGW_BIN}/libwinpthread-1.dll" $<TARGET_FILE_DIR:booth_sim>)
+    endif ()
+endif ()
+
+enable_testing()
+add_test(NAME self_test COMMAND booth_sim test 20000)

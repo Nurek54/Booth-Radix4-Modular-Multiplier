@@ -1,4 +1,0 @@
-Cannot generate into C:\Users\g_sie\CLionProjects\OiAK_Projekt_Cpp_Verilog\cmake-build-debug
-It is already used for project C:\Users\g_sie\CLionProjects\new_project
-
-Please either delete it manually or select another generation directory

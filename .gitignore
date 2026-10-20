@@ -1,0 +1,6 @@
+cmake-build-*/
+build/
+obj_dir/
+.idea/
+*.vcd
+!docs/*.vcd
